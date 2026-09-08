@@ -9,9 +9,16 @@ import { GlideDataEditor } from "../glide-data-editor";
 const capturedDataEditor = vi.hoisted(() => ({
   ref: undefined as React.RefObject<HTMLElement> | undefined,
   onCellEdited: undefined as
-    | ((cell: [number, number], value: { data: unknown }) => void)
+    | ((
+        cell: [number, number],
+        value: { data: unknown; kind?: unknown },
+      ) => void)
     | undefined,
   onRowAppended: undefined as (() => void) | undefined,
+  getCellContent: undefined as
+    | ((cell: [number, number]) => Record<string, unknown>)
+    | undefined,
+  customRenderers: undefined as unknown[] | undefined,
 }));
 
 vi.mock("@glideapps/glide-data-grid", async () => {
@@ -22,15 +29,19 @@ vi.mock("@glideapps/glide-data-grid", async () => {
         portalElementRef?: React.RefObject<HTMLElement>;
         onCellEdited?: (
           cell: [number, number],
-          value: { data: unknown },
+          value: { data: unknown; kind?: unknown },
         ) => void;
         onRowAppended?: () => void;
+        getCellContent?: (cell: [number, number]) => Record<string, unknown>;
+        customRenderers?: unknown[];
       },
       _ref: React.Ref<HTMLDivElement>,
     ) {
       capturedDataEditor.ref = props.portalElementRef;
       capturedDataEditor.onCellEdited = props.onCellEdited;
       capturedDataEditor.onRowAppended = props.onRowAppended;
+      capturedDataEditor.getCellContent = props.getCellContent;
+      capturedDataEditor.customRenderers = props.customRenderers;
       return <div data-testid="mock-data-editor" />;
     }),
     CompactSelection: {
@@ -40,12 +51,17 @@ vi.mock("@glideapps/glide-data-grid", async () => {
       Text: "text",
       Number: "number",
       Boolean: "boolean",
+      Custom: "custom",
     },
     GridColumnIcon: {
       ProtectedColumnOverlay: "protected",
     },
   };
 });
+
+vi.mock("@glideapps/glide-data-grid-cells", () => ({
+  DropdownCell: { kind: "dropdown-renderer" },
+}));
 
 vi.mock("@/theme/useTheme", () => ({
   useTheme: () => ({ theme: "light" }),
@@ -55,6 +71,7 @@ const editorProps = {
   data: [{ name: "alice" }],
   columnFields: new Map([["name", "string"]]) as Map<string, "string">,
   editableColumns: "all" as const,
+  columnTypes: new Map(),
   onAddEdits: vi.fn(),
 };
 
@@ -103,6 +120,101 @@ describe("GlideDataEditor portal", () => {
 
     expect(onAddEdits).toHaveBeenCalledWith([
       { rowIdx: 0, columnId: "name", value: "bob" },
+    ]);
+  });
+
+  it("creates a restricted dropdown cell and registers only its renderer", () => {
+    render(
+      <TooltipProvider>
+        <GlideDataEditor
+          {...editorProps}
+          columnTypes={new Map([["name", ["alice", "bob"]]])}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(capturedDataEditor.getCellContent?.([0, 0])).toMatchObject({
+      kind: "custom",
+      copyData: "alice",
+      data: {
+        kind: "dropdown-cell",
+        value: "alice",
+        allowedValues: ["alice", "bob"],
+      },
+    });
+    expect(capturedDataEditor.customRenderers).toEqual([
+      { kind: "dropdown-renderer" },
+    ]);
+  });
+
+  it("emits the selected dropdown value and rejects an invalid empty edit", () => {
+    const onAddEdits = vi.fn();
+    render(
+      <TooltipProvider>
+        <GlideDataEditor
+          {...editorProps}
+          columnTypes={new Map([["name", ["alice", "bob"]]])}
+          onAddEdits={onAddEdits}
+        />
+      </TooltipProvider>,
+    );
+
+    act(() =>
+      capturedDataEditor.onCellEdited?.([0, 0], {
+        kind: "custom",
+        data: { kind: "dropdown-cell", value: "bob" },
+      }),
+    );
+    act(() =>
+      capturedDataEditor.onCellEdited?.([0, 0], {
+        kind: "custom",
+        data: { kind: "dropdown-cell", value: "" },
+      }),
+    );
+
+    expect(onAddEdits).toHaveBeenCalledTimes(1);
+    expect(onAddEdits).toHaveBeenCalledWith([
+      { rowIdx: 0, columnId: "name", value: "bob" },
+    ]);
+  });
+
+  it("uses the first dropdown option when appending a row", () => {
+    const onAddEdits = vi.fn();
+    render(
+      <TooltipProvider>
+        <GlideDataEditor
+          {...editorProps}
+          columnTypes={new Map([["name", ["first", "second"]]])}
+          onAddEdits={onAddEdits}
+        />
+      </TooltipProvider>,
+    );
+
+    act(() => capturedDataEditor.onRowAppended?.());
+
+    expect(onAddEdits).toHaveBeenCalledWith([
+      { rowIdx: 1, columnId: "name", value: "first" },
+    ]);
+  });
+
+  it("normalizes edits for a configured boolean column", () => {
+    const onAddEdits = vi.fn();
+    render(
+      <TooltipProvider>
+        <GlideDataEditor
+          {...editorProps}
+          data={[{ active: false }]}
+          columnFields={new Map([["active", "boolean" as const]])}
+          columnTypes={new Map([["active", "boolean" as const]])}
+          onAddEdits={onAddEdits}
+        />
+      </TooltipProvider>,
+    );
+
+    act(() => capturedDataEditor.onCellEdited?.([0, 0], { data: "YES" }));
+
+    expect(onAddEdits).toHaveBeenCalledWith([
+      { rowIdx: 0, columnId: "active", value: true },
     ]);
   });
 

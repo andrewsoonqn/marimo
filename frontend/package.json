@@ -46,6 +46,7 @@
     "@emotion/cache": "^11.14.0",
     "@emotion/react": "^11.14.0",
     "@glideapps/glide-data-grid": "6.0.4-alpha24",
+    "@glideapps/glide-data-grid-cells": "6.0.4-alpha24",
     "@hookform/resolvers": "^5.2.2",
     "@img-comparison-slider/react": "^8.0.2",
     "@internationalized/date": "^3.10.1",
