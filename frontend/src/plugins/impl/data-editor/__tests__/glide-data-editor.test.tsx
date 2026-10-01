@@ -9,9 +9,15 @@ import { GlideDataEditor } from "../glide-data-editor";
 const capturedDataEditor = vi.hoisted(() => ({
   ref: undefined as React.RefObject<HTMLElement> | undefined,
   onCellEdited: undefined as
-    | ((cell: [number, number], value: { data: unknown }) => void)
+    | ((
+        cell: [number, number],
+        value: { data: unknown; kind?: unknown },
+      ) => void)
     | undefined,
   onRowAppended: undefined as (() => void) | undefined,
+  getCellContent: undefined as
+    | ((cell: [number, number]) => Record<string, unknown>)
+    | undefined,
 }));
 
 vi.mock("@glideapps/glide-data-grid", async () => {
@@ -22,15 +28,17 @@ vi.mock("@glideapps/glide-data-grid", async () => {
         portalElementRef?: React.RefObject<HTMLElement>;
         onCellEdited?: (
           cell: [number, number],
-          value: { data: unknown },
+          value: { data: unknown; kind?: unknown },
         ) => void;
         onRowAppended?: () => void;
+        getCellContent?: (cell: [number, number]) => Record<string, unknown>;
       },
       _ref: React.Ref<HTMLDivElement>,
     ) {
       capturedDataEditor.ref = props.portalElementRef;
       capturedDataEditor.onCellEdited = props.onCellEdited;
       capturedDataEditor.onRowAppended = props.onRowAppended;
+      capturedDataEditor.getCellContent = props.getCellContent;
       return <div data-testid="mock-data-editor" />;
     }),
     CompactSelection: {
@@ -104,6 +112,27 @@ describe("GlideDataEditor portal", () => {
 
     expect(onAddEdits).toHaveBeenCalledWith([
       { rowIdx: 0, columnId: "name", value: "bob" },
+    ]);
+  });
+
+  it("normalizes edits for a configured boolean column", () => {
+    const onAddEdits = vi.fn();
+    render(
+      <TooltipProvider>
+        <GlideDataEditor
+          {...editorProps}
+          data={[{ active: false }]}
+          columnFields={new Map([["active", "boolean" as const]])}
+          columnTypes={new Map([["active", "boolean" as const]])}
+          onAddEdits={onAddEdits}
+        />
+      </TooltipProvider>,
+    );
+
+    act(() => capturedDataEditor.onCellEdited?.([0, 0], { data: "YES" }));
+
+    expect(onAddEdits).toHaveBeenCalledWith([
+      { rowIdx: 0, columnId: "active", value: true },
     ]);
   });
 
