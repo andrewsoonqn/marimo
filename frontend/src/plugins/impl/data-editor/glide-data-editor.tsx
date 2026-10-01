@@ -39,10 +39,12 @@ import { toast } from "@/components/ui/use-toast";
 import type { DataType } from "@/core/kernel/messages";
 import { logNever } from "@/utils/assertNever";
 import { Events } from "@/utils/events";
+import { normalizeBoolean } from "./column-types";
 import { AddColumnSub, RenameColumnSub } from "./components";
 import { GlideDataEditorPortal } from "./glide-portal";
 import {
   BulkEdit,
+  type ColumnTypes,
   type EditorRow,
   type Edits,
   type ModifiedGridColumn,
@@ -51,6 +53,7 @@ import {
 interface GlideDataEditorProps {
   data: EditorRow[];
   columnFields: FieldTypes;
+  columnTypes: ColumnTypes;
   editableColumns: string[] | "all";
   onAddEdits: (edits: Edits["edits"]) => void;
 }
@@ -58,6 +61,7 @@ interface GlideDataEditorProps {
 export const GlideDataEditor = ({
   data,
   columnFields,
+  columnTypes,
   editableColumns,
   onAddEdits,
 }: GlideDataEditorProps) => {
@@ -90,6 +94,7 @@ export const GlideDataEditor = ({
         style: "normal",
         kind: getColumnKind(fieldType),
         dataType: fieldType,
+        configuredType: columnTypes.get(columnName),
         hasMenu: true,
         themeOverride: editable
           ? undefined
@@ -100,7 +105,7 @@ export const GlideDataEditor = ({
     }
 
     return columns;
-  }, [columnFields, columnWidths, editableColumns, theme]);
+  }, [columnFields, columnTypes, columnWidths, editableColumns, theme]);
 
   const getCellContent = useCallback(
     (cell: Item): GridCell => {
@@ -114,7 +119,10 @@ export const GlideDataEditor = ({
         editableColumns.includes(columns[col].title);
 
       if (columnKind === GridCellKind.Boolean) {
-        const value = Boolean(dataItem);
+        const value =
+          columns[col].configuredType === "boolean"
+            ? normalizeBoolean(dataItem, columns[col].title)
+            : Boolean(dataItem);
         return {
           kind: GridCellKind.Boolean,
           allowOverlay: false,
@@ -152,6 +160,9 @@ export const GlideDataEditor = ({
 
       // Deletes are not handled by validateCell, so we need to handle them here
       let newData = newValue.data;
+      if (column.configuredType === "boolean") {
+        newData = normalizeBoolean(newData, key);
+      }
       if (
         (column.dataType === "number" || column.dataType === "integer") &&
         (newValue.data === undefined || newValue.data === "")
@@ -226,6 +237,9 @@ export const GlideDataEditor = ({
     const newRow: EditorRow = Object.fromEntries(
       columns.map((column) => {
         const dataType = column.dataType;
+        if (column.configuredType === "boolean") {
+          return [column.title, false];
+        }
         switch (dataType) {
           case "boolean":
             return [column.title, false];
