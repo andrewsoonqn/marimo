@@ -11,6 +11,7 @@ import { Logger } from "@/utils/Logger";
 import { normalizeBoolean } from "./column-types";
 import type {
   ColumnEdit,
+  ColumnType,
   EditorRow,
   Edits,
   ModifiedGridColumn,
@@ -65,7 +66,12 @@ export function getColumnHeaderIcon(fieldType: DataType): GridColumnIcon {
 export function isValidCellValue(
   dataType: DataType | undefined,
   value: unknown,
+  columnType?: ColumnType,
 ): boolean {
+  if (Array.isArray(columnType)) {
+    return typeof value === "string" && columnType.includes(value);
+  }
+
   switch (dataType) {
     case "number":
       return Number.isFinite(Number(value));
@@ -175,6 +181,7 @@ export function pasteCells(options: {
 
           const column = columns[targetColIdx];
           const dataType = column.dataType;
+          const columnType = column.configuredType;
           const editable =
             editableColumns === "all" || editableColumns.includes(column.title);
 
@@ -185,10 +192,16 @@ export function pasteCells(options: {
           // Convert the value based on the cell type
           let convertedValue: unknown = cellValue;
 
+          if (Array.isArray(columnType)) {
+            if (!isValidCellValue(dataType, cellValue, columnType)) {
+              continue;
+            }
+          }
+
           switch (dataType) {
             case "integer": {
               const numValue = Number(cellValue);
-              if (!isValidCellValue(dataType, cellValue)) {
+              if (!isValidCellValue(dataType, cellValue, columnType)) {
                 continue;
               }
               convertedValue = Number.isSafeInteger(numValue)
@@ -198,7 +211,7 @@ export function pasteCells(options: {
             }
             case "number": {
               const numValue = Number(cellValue);
-              if (!isValidCellValue(dataType, numValue)) {
+              if (!isValidCellValue(dataType, numValue, columnType)) {
                 continue;
               }
               convertedValue = numValue;
